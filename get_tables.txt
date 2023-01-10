@@ -1,0 +1,90 @@
+DECLARE
+	v_tabla VARCHAR2(100);
+	v_sql   VARCHAR2(4000);
+	v_tipo  VARCHAR2(50);
+	v_nulo  VARCHAR2(20);
+	v_ncols NUMBER;
+	v_clen  NUMBER;
+	v_cmax  NUMBER;
+	v_comma VARCHAR2(1);
+BEGIN
+	v_tabla := 'TB_DEMO';
+
+	BEGIN
+		SELECT COUNT(*)
+			INTO v_ncols
+			FROM all_tab_cols
+		 WHERE owner = USER
+			 AND table_name = v_tabla;
+	EXCEPTION
+		WHEN OTHERS THEN
+			NULL;
+	END;
+
+	BEGIN
+		SELECT MAX(length(column_name))
+			INTO v_cmax
+			FROM all_tab_cols
+		 WHERE owner = USER
+			 AND table_name = v_tabla;
+	EXCEPTION
+		WHEN OTHERS THEN
+			NULL;
+	END;
+
+	dbms_output.put_line('N. de columnas: ' || v_ncols || chr(13));
+
+	v_sql := 'create table ' || v_tabla || chr(13) || '(';
+	dbms_output.put_line(v_sql);
+
+	FOR x IN (SELECT tc.column_name
+									,tc.data_type
+									,tc.data_length
+									,tc.data_precision
+									,tc.data_scale
+									,tc.nullable
+									,tc.column_id
+							FROM all_tab_cols tc
+						 WHERE tc.owner = USER
+							 AND tc.table_name = v_tabla
+						 ORDER BY tc.column_id) LOOP
+		IF x.column_id = v_ncols THEN
+			v_comma := '';
+		ELSE
+			v_comma := ',';
+		END IF;
+		v_clen := length(x.column_name);
+		IF x.data_type = 'NUMBER' THEN
+			IF x.data_precision IS NOT NULL THEN
+				IF x.data_scale <> 0 THEN
+					v_tipo := ' NUMBER(' || x.data_precision || ',' || x.data_scale || ')';
+				ELSE
+					v_tipo := ' NUMBER(' || x.data_precision || ')';
+				END IF;
+			ELSE
+				v_tipo := ' NUMBER';
+			END IF;
+		END IF;
+		IF x.data_type = 'VARCHAR2' THEN
+			v_tipo := ' VARCHAR2(' || x.data_length || ')';
+		END IF;
+		IF x.data_type = 'DATE'
+			 OR x.data_type = 'BLOB'
+			 OR x.data_type = 'CLOB' THEN
+			v_tipo := x.data_type;
+		END IF;
+		IF x.nullable = 'Y' THEN
+			v_nulo := '';
+		ELSE
+			v_nulo := ' not null';
+		END IF;
+		v_sql := chr(9) || x.column_name ||
+						 lpad(' '
+								 ,(v_cmax - v_clen) + 2
+								 ,' ') || v_tipo || v_nulo || v_comma;
+		dbms_output.put_line(v_sql);
+	END LOOP;
+
+	v_sql := ');';
+	dbms_output.put_line(v_sql);
+END;
