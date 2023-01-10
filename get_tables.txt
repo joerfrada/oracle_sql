@@ -22,7 +22,7 @@ BEGIN
 	END;
 
 	BEGIN
-		SELECT MAX(length(column_name))
+		SELECT MAX(length(column_name)) + 1
 			INTO v_cmax
 			FROM all_tab_cols
 		 WHERE owner = USER
@@ -53,7 +53,6 @@ BEGIN
 		ELSE
 			v_comma := ',';
 		END IF;
-		v_clen := length(x.column_name);
 		IF x.data_type = 'NUMBER' THEN
 			IF x.data_precision IS NOT NULL THEN
 				IF x.data_scale <> 0 THEN
@@ -71,20 +70,26 @@ BEGIN
 		IF x.data_type = 'DATE'
 			 OR x.data_type = 'BLOB'
 			 OR x.data_type = 'CLOB' THEN
-			v_tipo := x.data_type;
+			v_tipo := ' ' || x.data_type;
 		END IF;
 		IF x.nullable = 'Y' THEN
 			v_nulo := '';
 		ELSE
 			v_nulo := ' not null';
 		END IF;
-		v_sql := chr(9) || x.column_name ||
-						 lpad(' '
-								 ,(v_cmax - v_clen) + 2
-								 ,' ') || v_tipo || v_nulo || v_comma;
+		v_clen := length(x.column_name);
+		v_sql := chr(9) || rpad(lower(x.column_name)
+													 ,CASE
+															WHEN v_clen < v_cmax THEN
+															 v_cmax - v_clen + v_clen
+															ELSE
+															 v_cmax
+														END
+													 ,' ') || v_tipo || v_nulo || v_comma;
 		dbms_output.put_line(v_sql);
 	END LOOP;
 
 	v_sql := ');';
 	dbms_output.put_line(v_sql);
 END;
+/
