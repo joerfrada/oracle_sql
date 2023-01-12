@@ -1,18 +1,23 @@
 DECLARE
-	v_tabla VARCHAR2(100);
-	v_sql   VARCHAR2(4000);
-	v_tipo  VARCHAR2(50);
-	v_nulo  VARCHAR2(20);
-	v_ncols NUMBER;
-	v_clen  NUMBER;
-	v_cmax  NUMBER;
-	v_comma VARCHAR2(1);
+	v_tabla          VARCHAR2(100);
+	v_sql            VARCHAR2(4000);
+	v_tipo           VARCHAR2(50);
+	v_nulo           VARCHAR2(20);
+	v_num_cols       NUMBER;
+	v_clen           NUMBER;
+	v_cmax           NUMBER;
+	v_comma          VARCHAR2(1);
+	v_existe_tab_com NUMBER;
+	v_existe_col_com NUMBER;
+	v_existe_pri     NUMBER;
+	v_existe_uni     NUMBER;
+	v_existe_for     NUMBER;
 BEGIN
-	v_tabla := 'TB_DEMO';
+	v_tabla := 'TB_AD_LISTAS_DINAMICAS';
 
 	BEGIN
 		SELECT COUNT(*)
-			INTO v_ncols
+			INTO v_num_cols
 			FROM all_tab_cols
 		 WHERE owner = USER
 			 AND table_name = v_tabla;
@@ -22,7 +27,7 @@ BEGIN
 	END;
 
 	BEGIN
-		SELECT MAX(length(column_name)) + 1
+		SELECT MAX(length(column_name))
 			INTO v_cmax
 			FROM all_tab_cols
 		 WHERE owner = USER
@@ -32,8 +37,9 @@ BEGIN
 			NULL;
 	END;
 
-	dbms_output.put_line('N. de columnas: ' || v_ncols || chr(13));
+	dbms_output.put_line('N. de columnas: ' || v_num_cols || chr(13));
 
+	dbms_output.put_line('-- Create table');
 	v_sql := 'create table ' || v_tabla || chr(13) || '(';
 	dbms_output.put_line(v_sql);
 
@@ -48,7 +54,7 @@ BEGIN
 						 WHERE tc.owner = USER
 							 AND tc.table_name = v_tabla
 						 ORDER BY tc.column_id) LOOP
-		IF x.column_id = v_ncols THEN
+		IF x.column_id = v_num_cols THEN
 			v_comma := '';
 		ELSE
 			v_comma := ',';
@@ -91,5 +97,162 @@ BEGIN
 
 	v_sql := ');';
 	dbms_output.put_line(v_sql);
+
+	BEGIN
+		SELECT 1
+			INTO v_existe_tab_com
+			FROM all_tab_comments t
+		 WHERE t.owner = USER
+			 AND t.table_type = 'TABLE'
+			 AND t.comments IS NOT NULL
+			 AND t.table_name = v_tabla;
+	EXCEPTION
+		WHEN OTHERS THEN
+			NULL;
+	END;
+
+	BEGIN
+		SELECT 1
+			INTO v_existe_col_com
+			FROM all_col_comments c
+		 WHERE c.owner = USER
+			 AND c.comments IS NOT NULL
+			 AND c.table_name = v_tabla;
+	EXCEPTION
+		WHEN OTHERS THEN
+			NULL;
+	END;
+
+	BEGIN
+		SELECT 1
+			INTO v_existe_pri
+			FROM all_constraints c
+		 WHERE c.owner = USER
+			 AND c.constraint_type = 'P'
+			 AND c.table_name = v_tabla;
+	EXCEPTION
+		WHEN OTHERS THEN
+			NULL;
+	END;
+
+	BEGIN
+		SELECT 1
+			INTO v_existe_uni
+			FROM all_constraints c
+		 WHERE c.owner = USER
+			 AND c.constraint_type = 'U'
+			 AND c.table_name = v_tabla;
+	EXCEPTION
+		WHEN OTHERS THEN
+			NULL;
+	END;
+
+	BEGIN
+		SELECT 1
+			INTO v_existe_for
+			FROM all_constraints c
+		 WHERE c.owner = USER
+			 AND c.constraint_type = 'R'
+			 AND c.table_name = v_tabla;
+	EXCEPTION
+		WHEN OTHERS THEN
+			NULL;
+	END;
+
+	dbms_output.put_line('-- Add comments to the table');
+	IF v_existe_tab_com = 1 THEN
+		FOR x IN (SELECT t.table_name
+										,t.comments
+								FROM all_tab_comments t
+							 WHERE t.owner = USER
+								 AND t.table_type = 'TABLE'
+								 AND t.table_name = v_tabla) LOOP
+			v_sql := 'comment on table ' || x.table_name || chr(13) || chr(9) ||
+							 'is ''' || x.comments || ''';';
+			dbms_output.put_line(v_sql);
+		END LOOP;
+	END IF;
+
+	dbms_output.put_line('-- Add comments to the columns');
+	IF v_existe_col_com = 1 THEN
+		FOR x IN (SELECT c.table_name
+										,c.column_name
+										,c.comments
+								FROM all_col_comments c
+							 WHERE c.owner = USER
+								 AND c.table_name = v_tabla) LOOP
+			v_sql := 'comment on table ' || x.table_name || '.' ||
+							 lower(x.column_name) || chr(13) || chr(9) || 'is ''' ||
+							 x.comments || ''';';
+			dbms_output.put_line(v_sql);
+		END LOOP;
+	END IF;
+
+	dbms_output.put_line('-- Create/Recreate primary, unique and foreign key constraints');
+	IF v_existe_pri = 1 THEN
+		FOR x IN (SELECT c.constraint_name
+										,listagg(cc.column_name
+														,',') within GROUP(ORDER BY cc.position) column_name
+								FROM all_constraints c
+							 INNER JOIN all_cons_columns cc
+									ON c.constraint_name = cc.constraint_name
+							 WHERE c.owner = USER
+								 AND c.constraint_type = 'P'
+								 AND c.table_name = v_tabla
+							 GROUP BY c.constraint_name) LOOP
+			v_sql := 'alter table ' || v_tabla || chr(13) || chr(9) ||
+							 'add constraint ' || x.constraint_name || ' primary key (' ||
+							 x.column_name || ');';
+			dbms_output.put_line(v_sql);
+		END LOOP;
+	END IF;
+
+	IF v_existe_uni = 1 THEN
+		FOR x IN (SELECT c.constraint_name
+										,listagg(cc.column_name
+														,',') within GROUP(ORDER BY cc.position) column_name
+								FROM all_constraints c
+							 INNER JOIN all_cons_columns cc
+									ON c.constraint_name = cc.constraint_name
+							 WHERE c.owner = USER
+								 AND c.constraint_type = 'U'
+								 AND c.table_name = v_tabla
+							 GROUP BY c.constraint_name) LOOP
+			v_sql := 'alter table ' || v_tabla || ' ' || 'add constraint ' ||
+							 x.constraint_name || ' unique (' || x.column_name || ');';
+			dbms_output.put_line(v_sql);
+		END LOOP;
+	END IF;
+
+	IF v_existe_for = 1 THEN
+		FOR x IN (SELECT c.constraint_name
+										,listagg(cc.column_name
+														,',') within GROUP(ORDER BY cc.position) column_name
+										,(SELECT c1.table_name
+												FROM all_constraints c1
+											 WHERE c1.constraint_name = c.r_constraint_name) ref_table_name
+										,(SELECT cc1.column_name
+												FROM all_cons_columns cc1
+											 INNER JOIN all_constraints c2
+													ON cc1.constraint_name = c2.constraint_name
+											 WHERE c2.constraint_name = c.r_constraint_name) ref_column_name
+								FROM all_constraints c
+							 INNER JOIN all_cons_columns cc
+									ON c.constraint_name = cc.constraint_name
+							 WHERE c.owner = USER
+								 AND c.constraint_type = 'R'
+								 AND c.table_name = v_tabla
+							 GROUP BY c.constraint_name
+											 ,c.r_constraint_name
+											 ,cc.position
+											 ,c.table_name
+							 ORDER BY cc.position) LOOP
+			v_sql := 'alter table ' || v_tabla || chr(13) || chr(9) ||
+							 'add constraint ' || x.constraint_name || ' foreign key (' ||
+							 x.column_name || ')' || chr(13) || chr(9) || 'references ' ||
+							 x.ref_table_name || ' (' || x.ref_column_name || ');';
+			dbms_output.put_line(v_sql);
+		END LOOP;
+	END IF;
 END;
 /
