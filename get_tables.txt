@@ -181,7 +181,7 @@ BEGIN
 								FROM all_col_comments c
 							 WHERE c.owner = USER
 								 AND c.table_name = v_tabla) LOOP
-			v_sql := 'comment on table ' || x.table_name || '.' ||
+			v_sql := 'comment on column ' || x.table_name || '.' ||
 							 lower(x.column_name) || chr(13) || chr(9) || 'is ''' ||
 							 x.comments || ''';';
 			dbms_output.put_line(v_sql);
